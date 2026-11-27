@@ -13,7 +13,8 @@ powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -Command ^
   "  Write-Host ('Downloading ' + $asset);" ^
   "  curl.exe --fail --location --show-error --silent --retry 2 ($env:MYTUBE_RELEASE + '/' + $asset) -o $zip;" ^
   "  if ($LASTEXITCODE -ne 0) { throw 'Could not download the MyTube release.' };" ^
-  "  Expand-Archive -LiteralPath $zip -DestinationPath $work.FullName;" ^
+  "  & (Join-Path $env:SystemRoot 'System32\tar.exe') -xf $zip -C $work.FullName;" ^
+  "  if ($LASTEXITCODE -ne 0) { throw 'Could not extract the MyTube release.' };" ^
   "  & (Join-Path $work.FullName 'Install MyTube.ps1');" ^
   "  Write-Host 'Installed MyTube. Open it from the Start menu.';" ^
   "} finally { Remove-Item -LiteralPath $work.FullName -Recurse -Force }"
