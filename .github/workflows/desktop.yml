@@ -69,7 +69,22 @@ jobs:
         run: |
           packaging/linux/build.sh
           test "$(dpkg-deb -f target/install/linux/*.deb Version)" = "$PACKAGE_VERSION"
-          sudo apt-get install -y --no-install-recommends ./target/install/linux/*.deb xvfb xauth
+      - name: Install Ubuntu package through curl and launch it
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get install -y --no-install-recommends xvfb xauth
+          site="$RUNNER_TEMP/mytube-install-test"
+          tag="v$PACKAGE_VERSION"
+          mkdir -p "$site/$tag/packaging" "$site/releases/download/$tag"
+          cp packaging/install.sh "$site/$tag/packaging/"
+          cp target/install/linux/*.deb "$site/releases/download/$tag/"
+          python3 -m http.server 8765 --bind 127.0.0.1 --directory "$site" &
+          server_pid=$!
+          trap 'kill "$server_pid"' EXIT
+          base="http://127.0.0.1:8765"
+          export MYTUBE_RELEASE="$base/releases/download/$tag"
+          curl -fsSL --retry 5 --retry-connrefused "$base/$tag/packaging/install.sh" -o "$RUNNER_TEMP/install-mytube.sh"
+          sh "$RUNNER_TEMP/install-mytube.sh" <<< 'Y'
           for tool in ffmpeg ffprobe curl xdg-open zenity; do command -v "$tool"; done
           cargo test --locked native_tools_apply_to_decoded_video -- --ignored
           test -x /usr/bin/mytube
