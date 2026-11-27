@@ -27,9 +27,40 @@
 - Choose from six looks across YouTube, Liquid Glass, and Glass UI (Opaque), each in light and dark.
 
 ## Install
+
+For a public v1.0.0 release, run this on Ubuntu 24.04 (amd64) or an Apple silicon Mac:
+
 ```sh
-curl -fsSL https://raw.githubusercontent.com/mo1ein/mytube/v1.0.0/packaging/install.sh -o install-mytube.sh && sh install-mytube.sh
+curl -fsSL https://raw.githubusercontent.com/mo1ein/mytube/v1.0.0/packaging/install.sh -o install-mytube.sh &&
+  sh install-mytube.sh
 ```
+
+The URL requires a public repository and the `v1.0.0` tag. To enable Ubuntu installation, attach `mytube_1.0.0_amd64.deb` from the tagged Desktop build to the published GitHub Release. For Apple silicon, attach the inner `mytube-1.0.0-macos-arm64.zip`.
+
+### Test a private build
+
+The Linux CI job serves the installer and Debian package on the runner's loopback interface, downloads them with curl, installs the package, and launches the app.
+
+Sign in to GitHub with an account that can read this repository. Open the [Desktop workflow](https://github.com/mo1ein/mytube/actions/workflows/desktop.yml), select the build for the `main` commit you want, and download your platform's package under **Artifacts** after its job succeeds.
+
+### Linux
+
+On Ubuntu 24.04 (amd64), download `mytube-1.0.0-linux-x64`. From the directory containing the downloaded ZIP, run:
+
+```sh
+unzip -j mytube-1.0.0-linux-x64.zip '*mytube_1.0.0_amd64.deb' &&
+  sudo apt install ./mytube_1.0.0_amd64.deb
+```
+
+Launch MyTube from the applications menu or run `mytube`.
+
+### macOS
+
+On Apple silicon, download `mytube-1.0.0-macos-arm64`. Extract the artifact and the installer ZIP inside it, then open `Install MyTube.command` beside `MyTube.app`.
+
+### Windows
+
+On Windows x64, download `mytube-1.0.0-windows-x64`. Extract the artifact and the installer ZIP inside it, then run `Install MyTube.cmd`.
 
 ### First launch
 
