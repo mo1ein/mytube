@@ -93,24 +93,34 @@ jobs:
           export MYTUBE_SCAN_ROOTS="$RUNNER_TEMP/mytube-empty"
           timeout 12 xvfb-run -a mytube || test "$?" = 124
           test -s "$MYTUBE_DATA_DIR/library.sqlite3"
-      - name: Build macOS installer archive
+      - name: Build macOS installers
         if: runner.os == 'macOS'
         run: |
+          brew install ffmpeg mpv
           packaging/macos/build.sh
           codesign --verify --strict target/install/macos/MyTube.app
           plutil -lint target/install/macos/MyTube.app/Contents/Info.plist
           test "$(plutil -extract CFBundleShortVersionString raw target/install/macos/MyTube.app/Contents/Info.plist)" = "$PACKAGE_VERSION"
           ditto -c -k --norsrc --noextattr target/install/macos "target/install/$PACKAGE_NAME.zip"
+          python3 packaging/macos/build-dmg.py target/install/macos/MyTube.app "target/install/$PACKAGE_NAME.dmg"
       - name: Launch packaged macOS app
         if: runner.os == 'macOS'
         run: |
           export MYTUBE_DATA_DIR="$RUNNER_TEMP/mytube-smoke"
           mkdir -p "$RUNNER_TEMP/mytube-empty"
           export MYTUBE_SCAN_ROOTS="$RUNNER_TEMP/mytube-empty"
-          "target/install/macos/Install MyTube.command"
-          contents="$HOME/Applications/MyTube.app/Contents"
-          export PATH="$(cat "$contents/Resources/media-bin"):$PATH"
-          export MYTUBE_LIBMPV="$(cat "$contents/Resources/libmpv-path")"
+          mountpoint="$RUNNER_TEMP/mytube-dmg"
+          mkdir -p "$mountpoint"
+          hdiutil attach -readonly -nobrowse -mountpoint "$mountpoint" "target/install/$PACKAGE_NAME.dmg"
+          trap 'hdiutil detach "$mountpoint"' EXIT
+          test "$(readlink "$mountpoint/Applications")" = /Applications
+          ditto "$mountpoint/MyTube.app" "$RUNNER_TEMP/MyTube.app"
+          hdiutil detach "$mountpoint"
+          trap - EXIT
+          contents="$RUNNER_TEMP/MyTube.app/Contents"
+          export PATH="$contents/MacOS:$PATH"
+          export MYTUBE_LIBMPV="$contents/MacOS/libmpv.2.dylib"
+          "$contents/MacOS/ffprobe" -version
           cargo test --locked native_tools_apply_to_decoded_video -- --ignored
           "$contents/MacOS/mytube" &
           player_pid=$!
@@ -169,4 +179,5 @@ jobs:
           path: |
             target/install/linux/*.deb
             target/install/*.zip
+            target/install/*.dmg
           if-no-files-found: error

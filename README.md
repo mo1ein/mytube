@@ -46,7 +46,27 @@ Launch MyTube from the applications menu or run `mytube`.
 
 ### macOS
 
-On Apple silicon, download `mytube-1.0.0-macos-arm64`. Extract the artifact and the installer ZIP inside it, then open `Install MyTube.command` beside `MyTube.app`.
+On Apple silicon, open `mytube-1.0.0-macos-arm64.dmg`. If you downloaded the GitHub Actions artifact, unzip it first. Drag **MyTube** onto **Applications** in the disk image, eject it, and open MyTube from Applications. The app includes its playback and media tools.
+
+If macOS blocks the app you dragged to **Applications** and you trust the download, clear its quarantine attribute and open it from Terminal.
+
+```sh
+xattr -dr com.apple.quarantine /Applications/MyTube.app
+open /Applications/MyTube.app
+```
+
+For the ZIP installer, extract it and run this from the folder containing `MyTube.app`.
+
+```sh
+/bin/bash "./Install MyTube.command"
+```
+
+The ZIP installer places MyTube in your home folder’s Applications directory. If macOS blocks that copy and you trust the download, use its path instead.
+
+```sh
+xattr -dr com.apple.quarantine "$HOME/Applications/MyTube.app"
+open "$HOME/Applications/MyTube.app"
+```
 
 ### Windows
 
