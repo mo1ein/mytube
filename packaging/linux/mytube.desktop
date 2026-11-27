@@ -3,6 +3,6 @@ Type=Application
 Name=MyTube
 Comment=Browse and play your local video library
 Exec=mytube
-Icon=video-x-generic
+Icon=mytube
 Terminal=false
 Categories=AudioVideo;Video;Player;

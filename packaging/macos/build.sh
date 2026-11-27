@@ -8,7 +8,7 @@ test -x "$binary"
 version="$(sed -n 's/^version = "\([^"]*\)"$/\1/p' Cargo.toml)"
 mkdir -p "$bundle/MacOS" "$bundle/Resources"
 install -m 755 "$binary" "$bundle/MacOS/mytube"
-install -m 644 assets/*-LICENSE.txt "$bundle/Resources/"
+install -m 644 assets/*-LICENSE.txt packaging/macos/MyTube.icns "$bundle/Resources/"
 install -m 755 'packaging/macos/Install MyTube.command' "$output/Install MyTube.command"
 cat > "$bundle/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -18,6 +18,7 @@ cat > "$bundle/Info.plist" <<PLIST
   <key>CFBundleExecutable</key><string>mytube</string>
   <key>CFBundleIdentifier</key><string>app.mytube.desktop</string>
   <key>CFBundleName</key><string>MyTube</string>
+  <key>CFBundleIconFile</key><string>MyTube.icns</string>
   <key>CFBundlePackageType</key><string>APPL</string>
   <key>CFBundleShortVersionString</key><string>$version</string>
   <key>CFBundleVersion</key><string>$version</string>

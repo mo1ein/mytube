@@ -70,11 +70,13 @@ try {
 } finally {
     Remove-Item -LiteralPath $stage -Recurse -Force
 }
-Copy-Item -LiteralPath $binary -Destination $destination -Force
+$icon = Join-Path $PSScriptRoot 'mytube.ico'
+Copy-Item -LiteralPath $binary, $icon -Destination $destination -Force
 Copy-Item -Path (Join-Path $PSScriptRoot '*-LICENSE.txt') -Destination $destination -Force
 $menu = [Environment]::GetFolderPath([Environment+SpecialFolder]::Programs)
 $shell = New-Object -ComObject WScript.Shell
 $shortcut = $shell.CreateShortcut((Join-Path $menu 'MyTube.lnk'))
 $shortcut.TargetPath = Join-Path $destination 'mytube.exe'
 $shortcut.WorkingDirectory = $destination
+$shortcut.IconLocation = "$(Join-Path $destination 'mytube.ico'),0"
 $shortcut.Save()

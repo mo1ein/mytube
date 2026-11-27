@@ -16,6 +16,7 @@ chmod 755 "$stage"
 trap 'rm -r "$stage"' EXIT
 install -D -m 755 "$binary" "$stage/usr/bin/mytube"
 install -D -m 644 packaging/linux/mytube.desktop "$stage/usr/share/applications/mytube.desktop"
+install -D -m 644 assets/mytube.png "$stage/usr/share/icons/hicolor/256x256/apps/mytube.png"
 install -D -m 644 assets/Inter-LICENSE.txt "$stage/usr/share/doc/mytube/copyright"
 for license in assets/*-LICENSE.txt; do
     install -m 644 "$license" "$stage/usr/share/doc/mytube/"

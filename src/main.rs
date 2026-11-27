@@ -36,8 +36,12 @@ fn main() -> eframe::Result {
                 .split(':')
                 .any(|name| name.eq_ignore_ascii_case("gnome"))
         });
+    let icon = eframe::icon_data::from_png_bytes(include_bytes!("../assets/mytube.png"))
+        .expect("embedded MyTube icon must be a valid PNG");
     let options = eframe::NativeOptions {
         viewport: eframe::egui::ViewportBuilder::default()
+            .with_app_id("mytube")
+            .with_icon(icon)
             .with_inner_size(if defer_window_size {
                 PLACEMENT_WINDOW_SIZE
             } else {
