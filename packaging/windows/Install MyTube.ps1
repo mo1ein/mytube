@@ -6,10 +6,24 @@ if (-not (Test-Path -LiteralPath $binary -PathType Leaf)) {
 # Keep downloads for repairs and verify them before every extraction.
 $cache = Join-Path $env:LOCALAPPDATA 'MyTube\Installer'
 New-Item -ItemType Directory -Path $cache -Force | Out-Null
+function Get-Sha256([string]$path) {
+    $stream = [IO.File]::OpenRead($path)
+    try {
+        $algorithm = [Security.Cryptography.SHA256]::Create()
+        try {
+            return [BitConverter]::ToString($algorithm.ComputeHash($stream)).Replace('-', '')
+        } finally {
+            $algorithm.Dispose()
+        }
+    } finally {
+        $stream.Dispose()
+    }
+}
+
 function Get-VerifiedArchive([string]$url, [string]$sha256) {
     $archive = Join-Path $cache ([IO.Path]::GetFileName($url))
     if ((Test-Path -LiteralPath $archive -PathType Leaf) -and
-        (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -eq $sha256) {
+        (Get-Sha256 $archive) -eq $sha256) {
         return $archive
     }
     $download = Join-Path $cache ([guid]::NewGuid().ToString())
@@ -17,7 +31,7 @@ function Get-VerifiedArchive([string]$url, [string]$sha256) {
         Write-Host "Downloading $([IO.Path]::GetFileName($url))..."
         & "$env:SystemRoot\System32\curl.exe" --fail --silent --show-error --location --retry 2 --output $download $url
         if ($LASTEXITCODE -ne 0) { throw "Download failed for $url" }
-        if ((Get-FileHash -LiteralPath $download -Algorithm SHA256).Hash -ne $sha256) {
+        if ((Get-Sha256 $download) -ne $sha256) {
             throw "Checksum verification failed for $url"
         }
         Move-Item -LiteralPath $download -Destination $archive -Force
