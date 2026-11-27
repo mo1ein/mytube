@@ -22,8 +22,6 @@ jobs:
             artifact: mytube-macos-26-arm64
           - os: macos-15
             artifact: mytube-macos-arm64
-          - os: macos-15-intel
-            artifact: mytube-macos-x64
           - os: windows-2025
             artifact: mytube-windows-x64
     runs-on: ${{ matrix.os }}
