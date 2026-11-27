@@ -1,7 +1,7 @@
 : <<'MYTUBE_WINDOWS'
 @echo off
 setlocal
-set "MYTUBE_VERSION=1.0.0"
+set "MYTUBE_VERSION=1.0.1"
 if not defined MYTUBE_RELEASE set "MYTUBE_RELEASE=https://github.com/mo1ein/mytube/releases/download/v%MYTUBE_VERSION%"
 powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -Command ^
   "$ErrorActionPreference = 'Stop';" ^

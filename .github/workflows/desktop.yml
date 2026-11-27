@@ -6,9 +6,17 @@ on:
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing tag to build and publish (leave empty for a verification run)
+        type: string
+        required: false
 
 permissions:
   contents: read
+
+env:
+  RELEASE_TAG: ${{ inputs.release_tag || (github.ref_type == 'tag' && github.ref_name) || '' }}
 
 jobs:
   verify:
@@ -28,6 +36,8 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
+        with:
+          ref: ${{ inputs.release_tag && format('refs/tags/{0}', inputs.release_tag) || github.sha }}
       - name: Prepare Rust
         run: |
           rustup toolchain install stable --profile minimal --component rustfmt --component clippy
@@ -39,8 +49,8 @@ jobs:
         run: |
           version=$(sed -n 's/^version = "\([^"]*\)"$/\1/p' Cargo.toml)
           test -n "$version"
-          if [[ "$GITHUB_REF_TYPE" == tag && "$GITHUB_REF_NAME" != "v$version" ]]; then
-            echo "::error::Release tag $GITHUB_REF_NAME must match Cargo.toml (v$version)"
+          if [[ -n "$RELEASE_TAG" && "$RELEASE_TAG" != "v$version" ]]; then
+            echo "::error::Release tag $RELEASE_TAG must match Cargo.toml (v$version)"
             exit 1
           fi
           echo "PACKAGE_NAME=mytube-$version-${ARTIFACT#mytube-}" >> "$GITHUB_ENV"
@@ -144,13 +154,10 @@ jobs:
           New-Item -ItemType Directory -Path target/install/windows -Force | Out-Null
           Copy-Item -Path 'packaging/windows/*','target/x86_64-pc-windows-msvc/release/mytube.exe','assets/*-LICENSE.txt' -Destination target/install/windows
           Compress-Archive -Path 'target/install/windows/*' -DestinationPath "target/install/$env:PACKAGE_NAME.zip"
-      - name: Launch packaged Windows app
+      - name: Install Windows package and test playback
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
-          $env:MYTUBE_DATA_DIR = Join-Path $env:RUNNER_TEMP 'mytube-smoke'
-          $env:MYTUBE_SCAN_ROOTS = Join-Path $env:RUNNER_TEMP 'mytube-empty'
-          New-Item -ItemType Directory -Path $env:MYTUBE_SCAN_ROOTS -Force | Out-Null
           $env:MYTUBE_RELEASE = ([uri](Resolve-Path 'target/install').Path).AbsoluteUri.TrimEnd('/')
           $bootstrap = Join-Path $env:RUNNER_TEMP 'install-mytube.cmd'
           Copy-Item 'packaging/install.sh' $bootstrap
@@ -161,17 +168,41 @@ jobs:
           $env:MYTUBE_LIBMPV = Join-Path $installed 'libmpv-2.dll'
           cargo test --locked native_tools_apply_to_decoded_video -- --ignored
           if ($LASTEXITCODE -ne 0) { throw 'Installed playback runtime failed' }
-          $app = Start-Process (Join-Path $installed 'mytube.exe') -PassThru
+      - name: Launch packaged Windows app with software OpenGL
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $installed = Join-Path $env:LOCALAPPDATA 'Programs\MyTube'
+          # Supply OpenGL to the hosted runner without changing the release ZIP or system driver.
+          $mesa = Join-Path $env:RUNNER_TEMP 'mesa3d-26.3.1-release-msvc.7z'
+          curl.exe --fail --location --silent --show-error --retry 2 --output $mesa https://github.com/pal1000/mesa-dist-win/releases/download/26.3.1/mesa3d-26.3.1-release-msvc.7z
+          if ($LASTEXITCODE -ne 0) { throw 'Could not download the CI OpenGL driver' }
+          if ((Get-FileHash -LiteralPath $mesa -Algorithm SHA256).Hash -ne '64E84CF13D67DD354640BF443ED0445E6A83AFD06A5729F0750B3744D633B3F1') {
+            throw 'CI OpenGL driver checksum mismatch'
+          }
+          $mesaDir = Join-Path $env:RUNNER_TEMP 'mytube-mesa'
+          New-Item -ItemType Directory -Path $mesaDir -Force | Out-Null
+          & "$env:SystemRoot\System32\tar.exe" -xf $mesa -C $mesaDir x64/opengl32.dll x64/libgallium_wgl.dll
+          if ($LASTEXITCODE -ne 0) { throw 'Could not extract the CI OpenGL driver' }
+          Copy-Item -LiteralPath (Join-Path $mesaDir 'x64\opengl32.dll'), (Join-Path $mesaDir 'x64\libgallium_wgl.dll') -Destination $installed -Force
+          $env:GALLIUM_DRIVER = 'llvmpipe'
+          $env:MYTUBE_DATA_DIR = Join-Path $env:RUNNER_TEMP 'mytube-smoke'
+          $env:MYTUBE_SCAN_ROOTS = Join-Path $env:RUNNER_TEMP 'mytube-empty'
+          New-Item -ItemType Directory -Path $env:MYTUBE_SCAN_ROOTS -Force | Out-Null
+          $startupLog = Join-Path $env:RUNNER_TEMP 'mytube-startup.log'
+          $app = Start-Process (Join-Path $installed 'mytube.exe') -WorkingDirectory $installed -RedirectStandardError $startupLog -PassThru
           try {
             $catalog = Join-Path $env:MYTUBE_DATA_DIR 'library.sqlite3'
             foreach ($attempt in 1..30) {
+              $app.Refresh()
               if ($app.HasExited) { throw "Player exited with code $($app.ExitCode)" }
-              if ((Get-Item -LiteralPath $catalog -ErrorAction SilentlyContinue).Length -gt 0) { return }
+              if ($app.MainWindowHandle -ne [IntPtr]::Zero -and (Get-Item -LiteralPath $catalog -ErrorAction SilentlyContinue).Length -gt 0) { return }
               Start-Sleep -Seconds 1
             }
-            throw 'Player did not initialize the catalog'
+            throw 'Player did not open its window and initialize the catalog'
           } finally {
             if (-not $app.HasExited) { Stop-Process -Id $app.Id }
+            Get-Content -LiteralPath $startupLog
           }
       - uses: actions/upload-artifact@v7.0.2
         with:
@@ -181,3 +212,51 @@ jobs:
             target/install/*.zip
             target/install/*.dmg
           if-no-files-found: error
+
+  release:
+    needs: verify
+    if: github.ref_type == 'tag' || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      contents: write
+    concurrency:
+      group: desktop-release-${{ inputs.release_tag || github.ref_name }}
+      cancel-in-progress: false
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Download verified installers
+        run: gh run download "$GITHUB_RUN_ID" --pattern 'mytube-*' --dir installers
+      - name: Publish release assets
+        shell: bash
+        run: |
+          version=${RELEASE_TAG#v}
+          names=("mytube_${version}_amd64.deb" "mytube-$version-windows-x64.zip")
+          for platform in macos-arm64 macos-26-arm64; do
+            names+=("mytube-$version-$platform.dmg" "mytube-$version-$platform.zip")
+          done
+          assets=()
+          for name in "${names[@]}"; do
+            file=$(find installers -type f -name "$name")
+            if [[ ! -s "$file" ]]; then
+              echo "::error::Expected one nonempty installer named $name"
+              exit 1
+            fi
+            assets+=("$file")
+          done
+
+          if ! release=$(gh release view "$RELEASE_TAG" --json assets,isDraft); then
+            gh release create "$RELEASE_TAG" "${assets[@]}" --verify-tag --title "MyTube $RELEASE_TAG" --generate-notes
+            exit 0
+          fi
+
+          for asset in "${assets[@]}"; do
+            if ! jq -e --arg name "${asset##*/}" 'any(.assets[]; .name == $name and .state == "uploaded")' <<< "$release" >/dev/null; then
+              gh release upload "$RELEASE_TAG" "$asset" --clobber
+            fi
+          done
+          if jq -e '.isDraft' <<< "$release" >/dev/null; then
+            gh release edit "$RELEASE_TAG" --draft=false
+          fi

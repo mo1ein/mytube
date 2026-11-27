@@ -28,25 +28,25 @@
 
 ## Install
 
-For a public v1.0.0 release, run this on Ubuntu 24.04 (amd64) or an Apple silicon Mac:
+For a public v1.0.1 release, run this on Ubuntu 24.04 (amd64) or an Apple silicon Mac:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/mo1ein/mytube/v1.0.0/packaging/install.sh -o install-mytube.sh && sh install-mytube.sh
+curl -fsSL https://raw.githubusercontent.com/mo1ein/mytube/v1.0.1/packaging/install.sh -o install-mytube.sh && sh install-mytube.sh
 ```
 
 ### Linux
 
-On Ubuntu 24.04 (amd64), download `mytube-1.0.0-linux-x64`. From the directory containing the downloaded ZIP, run:
+On Ubuntu 24.04 (amd64), download `mytube_1.0.1_amd64.deb` from the release assets and run:
 
 ```sh
-unzip -j mytube-1.0.0-linux-x64.zip '*mytube_1.0.0_amd64.deb' && sudo apt install ./mytube_1.0.0_amd64.deb
+sudo apt install ./mytube_1.0.1_amd64.deb
 ```
 
 Launch MyTube from the applications menu or run `mytube`.
 
 ### macOS
 
-On Apple silicon, open `mytube-1.0.0-macos-arm64.dmg`. If you downloaded the GitHub Actions artifact, unzip it first. Drag **MyTube** onto **Applications** in the disk image, eject it, and open MyTube from Applications. The app includes its playback and media tools.
+On Apple silicon, open `mytube-1.0.1-macos-arm64.dmg`. If you downloaded the GitHub Actions artifact, unzip it first. Drag **MyTube** onto **Applications** in the disk image, eject it, and open MyTube from Applications. The app includes its playback and media tools.
 
 If macOS blocks the app you dragged to **Applications** and you trust the download, clear its quarantine attribute and open it from Terminal.
 
@@ -70,7 +70,7 @@ open "$HOME/Applications/MyTube.app"
 
 ### Windows
 
-On Windows x64, download `mytube-1.0.0-windows-x64`. Extract the artifact and the installer ZIP inside it, then run `Install MyTube.cmd`.
+On Windows x64, download `mytube-1.0.1-windows-x64.zip` from the release assets, extract it, and run `Install MyTube.cmd`.
 
 ### First launch
 
