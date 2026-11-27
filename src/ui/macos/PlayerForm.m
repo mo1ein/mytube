@@ -319,7 +319,10 @@ NSView *mytube_menu_rate_view(double rate, double minimum, double maximum,
     NSTextField *text = [NSTextField wrappingLabelWithString:label];
     if ([kind isEqual:@"heading"]) {
       text.font = [NSFont systemFontOfSize:13 weight:NSFontWeightSemibold];
-      text.accessibilityRole = NSAccessibilityHeadingRole;
+#if defined(__MAC_26_0) && __MAC_OS_X_VERSION_MAX_ALLOWED >= __MAC_26_0
+      if (@available(macOS 26.0, *))
+        text.accessibilityRole = NSAccessibilityHeadingRole;
+#endif
     } else {
       text.selectable = YES;
     }
