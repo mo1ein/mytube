@@ -2064,7 +2064,7 @@ impl Watch {
         }
     }
 
-    pub fn prepare_sidebars(&mut self, ui: &Ui) -> Rect {
+    pub fn prepare_sidebars(&mut self, ui: &Ui, reduce_motion: bool) -> Rect {
         let bounds = ui.available_rect_before_wrap().intersect(ui.clip_rect());
         let settings_left = self.settings_panel.leading(&self.prefs);
         if std::mem::take(&mut self.toggle_playlist) {
@@ -2091,7 +2091,7 @@ impl Watch {
             ui.ctx().animate_bool_with_time_and_easing(
                 Id::new("playback_settings_slide"),
                 self.settings_panel.open,
-                if self.reduce_motion() { 0. } else { 0.26 },
+                if reduce_motion { 0. } else { 0.26 },
                 egui::emath::easing::cubic_in_out,
             )
         };
@@ -4791,7 +4791,7 @@ fn standard_player_matches_chrome_and_keeps_its_frame_when_the_sidebar_changes()
                     },
                     |ui| {
                         ui.add_space(58.);
-                        watch.prepare_sidebars(ui);
+                        watch.prepare_sidebars(ui, watch.prefs.reduce_motion);
                         watch.show(
                             ui,
                             &mut library::Browser::default(),
@@ -4972,7 +4972,7 @@ fn docked_settings_keep_their_full_width_even_when_the_picture_is_inset() {
             ..Default::default()
         },
         |ui| {
-            let video_slot = watch.prepare_sidebars(ui);
+            let video_slot = watch.prepare_sidebars(ui, watch.prefs.reduce_motion);
             assert_eq!(
                 watch.settings_panel.sidebar.unwrap().left() - video_slot.right(),
                 WATCH_MARGIN
@@ -5033,7 +5033,7 @@ fn fullscreen_settings_expand_with_the_display_in_every_theme() {
                         ..Default::default()
                     },
                     |ui| {
-                        watch.prepare_sidebars(ui);
+                        watch.prepare_sidebars(ui, watch.prefs.reduce_motion);
                         let (panel, clip) = watch.settings_panel.sidebar_geometry().unwrap();
                         assert_eq!(panel, clip);
                         assert!((panel.width() - expected).abs() < 0.01);
@@ -5077,7 +5077,7 @@ fn settings_reverses_in_place_and_restores_each_player_layout() {
                             screen_rect: Some(bounds),
                             ..Default::default()
                         },
-                        |ui| video = watch.prepare_sidebars(ui),
+                        |ui| video = watch.prepare_sidebars(ui, false),
                     )
                     .drop_without_applying_deltas();
                     (video, watch.settings_panel.reveal)

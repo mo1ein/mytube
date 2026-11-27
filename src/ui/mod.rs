@@ -2678,12 +2678,13 @@ impl MyTube {
         self.playback_and_clipboard_shortcuts(ui.ctx());
         let progress = self.service.scan.progress();
         self.thumbs.begin();
+        let reduce_motion = self.watch.reduce_motion();
         self.thumbs.hover.begin(
             self.dialog.is_none()
                 && !self.pan_input.blocking()
                 && self.marquee.is_none()
                 && !ui.input(|i| i.modifiers.any() || i.pointer.primary_down() || i.any_touches()),
-            self.watch.reduce_motion(),
+            reduce_motion,
         );
         if !self.watch.fullscreen() {
             if !self.watch.active() || self.watch.mini() {
@@ -2694,7 +2695,7 @@ impl MyTube {
         }
         if self.watch.active() && !self.watch.mini() {
             let shortcuts = self.keys_allowed(ui.ctx());
-            let slot = self.watch.prepare_sidebars(ui);
+            let slot = self.watch.prepare_sidebars(ui, reduce_motion);
             let player = if self.watch.fullscreen() || self.watch.music {
                 slot
             } else {
@@ -3684,7 +3685,7 @@ mod tests {
         for docked in [false, true] {
             let output = ctx.run_ui(catalog_input(vec![]), |ui| {
                 if docked {
-                    app.watch.prepare_sidebars(ui);
+                    app.watch.prepare_sidebars(ui, false);
                 }
                 app.watch
                     .preferences_frame(&app.service, &mut app.appearance);
