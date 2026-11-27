@@ -1,0 +1,159 @@
+name: Desktop
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            artifact: mytube-linux-x64
+          - os: macos-26
+            artifact: mytube-macos-26-arm64
+          - os: macos-15
+            artifact: mytube-macos-arm64
+          - os: macos-15-intel
+            artifact: mytube-macos-x64
+          - os: windows-2025
+            artifact: mytube-windows-x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+      - name: Prepare Rust
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+          rustup default stable
+      - name: Read release version
+        shell: bash
+        env:
+          ARTIFACT: ${{ matrix.artifact }}
+        run: |
+          version=$(sed -n 's/^version = "\([^"]*\)"$/\1/p' Cargo.toml)
+          test -n "$version"
+          if [[ "$GITHUB_REF_TYPE" == tag && "$GITHUB_REF_NAME" != "v$version" ]]; then
+            echo "::error::Release tag $GITHUB_REF_NAME must match Cargo.toml (v$version)"
+            exit 1
+          fi
+          echo "PACKAGE_NAME=mytube-$version-${ARTIFACT#mytube-}" >> "$GITHUB_ENV"
+          echo "PACKAGE_VERSION=$version" >> "$GITHUB_ENV"
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libegl1-mesa-dev libgl1-mesa-dev libxkbcommon-dev libx11-dev libwayland-dev ffmpeg
+      - name: Check formatting
+        run: cargo fmt --check
+      - name: Run Clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
+      - name: Test
+        run: cargo test --locked
+      - name: Build desktop binary
+        if: runner.os != 'Windows'
+        run: cargo build --release --locked
+      - name: Build Windows desktop binary with the static C runtime
+        if: runner.os == 'Windows'
+        env:
+          CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_RUSTFLAGS: "-C target-feature=+crt-static"
+        run: cargo build --release --locked --target x86_64-pc-windows-msvc
+      - name: Build Debian installer
+        if: runner.os == 'Linux'
+        run: |
+          packaging/linux/build.sh
+          test "$(dpkg-deb -f target/install/linux/*.deb Version)" = "$PACKAGE_VERSION"
+          sudo apt-get install -y --no-install-recommends ./target/install/linux/*.deb xvfb xauth
+          for tool in ffmpeg ffprobe curl xdg-open zenity; do command -v "$tool"; done
+          cargo test --locked native_tools_apply_to_decoded_video -- --ignored
+          test -x /usr/bin/mytube
+          mkdir -p "$RUNNER_TEMP/mytube-empty"
+          export MYTUBE_DATA_DIR="$RUNNER_TEMP/mytube-smoke"
+          export MYTUBE_SCAN_ROOTS="$RUNNER_TEMP/mytube-empty"
+          timeout 12 xvfb-run -a mytube || test "$?" = 124
+          test -s "$MYTUBE_DATA_DIR/library.sqlite3"
+      - name: Build macOS installer archive
+        if: runner.os == 'macOS'
+        run: |
+          packaging/macos/build.sh
+          codesign --verify --strict target/install/macos/MyTube.app
+          plutil -lint target/install/macos/MyTube.app/Contents/Info.plist
+          test "$(plutil -extract CFBundleShortVersionString raw target/install/macos/MyTube.app/Contents/Info.plist)" = "$PACKAGE_VERSION"
+          ditto -c -k --norsrc --noextattr target/install/macos "target/install/$PACKAGE_NAME.zip"
+      - name: Launch packaged macOS app
+        if: runner.os == 'macOS'
+        run: |
+          export MYTUBE_DATA_DIR="$RUNNER_TEMP/mytube-smoke"
+          mkdir -p "$RUNNER_TEMP/mytube-empty"
+          export MYTUBE_SCAN_ROOTS="$RUNNER_TEMP/mytube-empty"
+          "target/install/macos/Install MyTube.command"
+          contents="$HOME/Applications/MyTube.app/Contents"
+          export PATH="$(cat "$contents/Resources/media-bin"):$PATH"
+          export MYTUBE_LIBMPV="$(cat "$contents/Resources/libmpv-path")"
+          cargo test --locked native_tools_apply_to_decoded_video -- --ignored
+          "$contents/MacOS/mytube" &
+          player_pid=$!
+          trap 'kill "$player_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..30}; do
+            if [ -s "$MYTUBE_DATA_DIR/library.sqlite3" ] && sqlite3 "$MYTUBE_DATA_DIR/library.sqlite3" 'SELECT theme FROM appearance LIMIT 1' 2>/dev/null | grep -q .; then
+              exit 0
+            fi
+            kill -0 "$player_pid"
+            sleep 1
+          done
+          exit 1
+      - name: Build Windows installer archive
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path 'packaging/windows/Install MyTube.ps1'), [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count) { throw ($errors -join "`n") }
+          New-Item -ItemType Directory -Path target/install/windows -Force | Out-Null
+          Copy-Item -Path 'packaging/windows/*','target/x86_64-pc-windows-msvc/release/mytube.exe','assets/*-LICENSE.txt' -Destination target/install/windows
+          Compress-Archive -Path 'target/install/windows/*' -DestinationPath "target/install/$env:PACKAGE_NAME.zip"
+      - name: Launch packaged Windows app
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $env:MYTUBE_DATA_DIR = Join-Path $env:RUNNER_TEMP 'mytube-smoke'
+          $env:MYTUBE_SCAN_ROOTS = Join-Path $env:RUNNER_TEMP 'mytube-empty'
+          New-Item -ItemType Directory -Path $env:MYTUBE_SCAN_ROOTS -Force | Out-Null
+          $env:MYTUBE_RELEASE = ([uri](Resolve-Path 'target/install').Path).AbsoluteUri.TrimEnd('/')
+          $bootstrap = Join-Path $env:RUNNER_TEMP 'install-mytube.cmd'
+          Copy-Item 'packaging/install.sh' $bootstrap
+          & $bootstrap
+          if ($LASTEXITCODE -ne 0) { throw 'Windows installer failed' }
+          $installed = Join-Path $env:LOCALAPPDATA 'Programs\MyTube'
+          $env:Path = "$installed;$env:Path"
+          $env:MYTUBE_LIBMPV = Join-Path $installed 'libmpv-2.dll'
+          cargo test --locked native_tools_apply_to_decoded_video -- --ignored
+          if ($LASTEXITCODE -ne 0) { throw 'Installed playback runtime failed' }
+          $app = Start-Process (Join-Path $installed 'mytube.exe') -PassThru
+          try {
+            $catalog = Join-Path $env:MYTUBE_DATA_DIR 'library.sqlite3'
+            foreach ($attempt in 1..30) {
+              if ($app.HasExited) { throw "Player exited with code $($app.ExitCode)" }
+              if ((Get-Item -LiteralPath $catalog -ErrorAction SilentlyContinue).Length -gt 0) { return }
+              Start-Sleep -Seconds 1
+            }
+            throw 'Player did not initialize the catalog'
+          } finally {
+            if (-not $app.HasExited) { Stop-Process -Id $app.Id }
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.PACKAGE_NAME }}
+          path: |
+            target/install/linux/*.deb
+            target/install/*.zip
+          if-no-files-found: error

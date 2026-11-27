@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=MyTube
+Comment=Browse and play your local video library
+Exec=mytube
+Icon=video-x-generic
+Terminal=false
+Categories=AudioVideo;Video;Player;
